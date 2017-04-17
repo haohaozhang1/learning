@@ -1,0 +1,10 @@
+![image](https://github.com/haohaozhang1/learning/pic/bygc.png)
+
+上面是goodle官网上的图片，下面简要分析一下
+1.	AAPT(Android Asset Packaging Tool)工具会打包应用中的资源文件，如Android工程里的AndroidManifest.xml、layout内的xml布局文件等，并将xml文件编译成二进制形式，当然assets文件、raw文件、图片不会改变。Raw里的文件经过编译也会生成资源id。AAPT编译完成之后生成R.java文件
+2.	AIDL工具会将.aidl文件编译成java文件
+3.	经过java’编译器，所有的java代码都会编译成class文件
+4.	经过dex工具，把主程序中的class文件和第三方库和其他的class文件和编译成.dex文件
+5.	经过apkbuilder工具，把.dex文件和编译过的资源文件+未编译过的资源文件一起打包成apk文件（目前还不能安装到手机上）
+6.	经过签名打包成apk，可以直接安装到手机上。签名有android studio默认的debug签名，如果打正式发版apk包，需要自己生成keystore。
+7.	如果打包成正式的apk包，还需要经过zipaligin工具进行对齐（好处是运行时减少内存的开销）
