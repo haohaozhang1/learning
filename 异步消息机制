@@ -1,0 +1,486 @@
+大家都知道Android中不能再异步线程中更新UI操作。所以异步操作要借用于Handler类。
+
+建Handler类之前必须先Looper.prepare()。然而在主线程可以直接new Handler()，因为APP启动入口是ActivityThread.main函数源码
+
+public static final void main(String[] args) {
+        SamplingProfilerIntegration.start();
+
+        Process.setArgV0("<pre-initialized>");
+
+        Looper.prepareMainLooper();
+        if (sMainThreadHandler == null) {
+            sMainThreadHandler = new Handler();
+        }
+
+        ActivityThread thread = new ActivityThread();
+        thread.attach(false);
+
+        if (false) {
+            Looper.myLooper().setMessageLogging(new
+                    LogPrinter(Log.DEBUG, "ActivityThread"));
+        }
+
+        Looper.loop();
+
+        if (Process.supportsProcesses()) {
+            throw new RuntimeException("Main thread loop unexpectedly exited");
+        }
+
+        thread.detach();
+        String name = (thread.mInitialApplication != null)
+            ? thread.mInitialApplication.getPackageName()
+            : "<unknown>";
+        Slog.i(TAG, "Main thread of " + name + " is now exiting");
+    }
+}
+
+发现主线程/UI线程已经Looper.prepareMainLooper()。
+
+为什么在new Handler()之前为什么要先Loop.prepare(),查看Handler初始化源码
+
+public Handler(Callback callback, boolean async) {
+        .......
+        mLooper = Looper.myLooper();
+        if (mLooper == null) {
+            throw new RuntimeException(
+                "Can't create handler inside thread that has not called Looper.prepare()");
+        }
+        mQueue = mLooper.mQueue;
+        mCallback = callback;
+        mAsynchronous = async;
+}
+再看一下Looper.myLooper（）源码
+
+public static @Nullable Looper myLooper() {
+        return sThreadLocal.get();   
+}
+
+static final ThreadLocal<Looper> sThreadLocal = new ThreadLocal<Looper>();
+
+然而sThreadLocal是在Looper.prepare（）时加入的。
+
+然后再看一下Looper.prepare（）源码
+
+public static void prepare() {
+        prepare(true);
+}
+
+private static void prepare(boolean quitAllowed) {
+if (sThreadLocal.get() != null) {
+    throw new RuntimeException("Only one Looper may be created per thread");
+}
+sThreadLocal.set(new Looper(quitAllowed));
+}
+
+再看一下Looper的构造函数
+
+private Looper(boolean quitAllowed) {
+        mQueue = new MessageQueue(quitAllowed);
+        mThread = Thread.currentThread();
+}
+
+发现创建了一个MessageQueue。所以Looper里必绑定一个MessageQueue
+
+所以new Handler之前必须首先Looper.prepare（），主线程已经有了Looper.prepareMainLooper（）。
+
+public static void prepareMainLooper() {
+        prepare(false);
+        synchronized (Looper.class) {
+            if (sMainLooper != null) {
+                throw new IllegalStateException("The main Looper has already been prepared.");
+            }
+            sMainLooper = myLooper();
+        }
+}
+
+所以异步线程创建Handler的时候的伪代码
+
+Looper.prepare();
+Handler handler = new Handler();
+Looper.Loop();
+
+看一下Looper.Loop（）做了什么
+
+public static void loop() {
+        final Looper me = myLooper();
+        if (me == null) {
+            throw new RuntimeException("No Looper; Looper.prepare() wasn't called on this thread.");
+        }
+        final MessageQueue queue = me.mQueue;
+
+        // Make sure the identity of this thread is that of the local process,
+        // and keep track of what that identity token actually is.
+        Binder.clearCallingIdentity();
+        final long ident = Binder.clearCallingIdentity();
+
+        for (;;) {
+            Message msg = queue.next(); // might block
+            if (msg == null) {
+                // No message indicates that the message queue is quitting.
+                return;
+            }
+
+            // This must be in a local variable, in case a UI event sets the logger
+            Printer logging = me.mLogging;
+            if (logging != null) {
+                logging.println(">>>>> Dispatching to " + msg.target + " " +
+                        msg.callback + ": " + msg.what);
+            }
+
+            msg.target.dispatchMessage(msg);
+
+            if (logging != null) {
+                logging.println("<<<<< Finished to " + msg.target + " " + msg.callback);
+            }
+
+            // Make sure that during the course of dispatching the
+            // identity of the thread wasn't corrupted.
+            final long newIdent = Binder.clearCallingIdentity();
+            if (ident != newIdent) {
+                Log.wtf(TAG, "Thread identity changed from 0x"
+                        + Long.toHexString(ident) + " to 0x"
+                        + Long.toHexString(newIdent) + " while dispatching to "
+                        + msg.target.getClass().getName() + " "
+                        + msg.callback + " what=" + msg.what);
+            }
+
+            msg.recycleUnchecked();
+        }
+}
+ 
+详细分析一下做了什么
+ 
+final Looper me = myLooper();
+这句是咱们之前Looper.prepare（）,创建的looper
+ 
+final MessageQueue queue = me.mQueue;
+这句是Looper.prepare（）里sThreadLocal.set调用了Looper的构造函数，构造函数里创建的MessageQueue
+ 
+for (;;) {}是一个死循环，里面会不断从MessageQueue里取出message交给Handler处理。
+
+Message msg = queue.next(); 查看MessageQueue.next()源码
+
+Message next() {
+        ..........
+        for (;;) {
+            if (nextPollTimeoutMillis != 0) {
+                Binder.flushPendingCommands();
+            }
+
+            nativePollOnce(ptr, nextPollTimeoutMillis);
+
+            synchronized (this) {
+                // Try to retrieve the next message.  Return if found.
+                final long now = SystemClock.uptimeMillis();
+                Message prevMsg = null;
+                Message msg = mMessages;
+                if (msg != null && msg.target == null) {
+                    // Stalled by a barrier.  Find the next asynchronous message in the queue.
+                    do {
+                        prevMsg = msg;
+                        msg = msg.next;
+                    } while (msg != null && !msg.isAsynchronous());
+                }
+                if (msg != null) {
+                    if (now < msg.when) {
+                        // Next message is not ready.  Set a timeout to wake up when it is ready.
+                        nextPollTimeoutMillis = (int) Math.min(msg.when - now, Integer.MAX_VALUE);
+                    } else {
+                        // Got a message.
+                        mBlocked = false;
+                        if (prevMsg != null) {
+                            prevMsg.next = msg.next;
+                        } else {
+                            mMessages = msg.next;
+                        }
+                        msg.next = null;
+                        if (DEBUG) Log.v(TAG, "Returning message: " + msg);
+                        msg.markInUse();
+                        return msg;
+                    }
+                } else {
+                    // No more messages.
+                    nextPollTimeoutMillis = -1;
+                }
+
+                // Process the quit message now that all pending messages have been handled.
+                if (mQuitting) {
+                    dispose();
+                    return null;
+                }
+
+                // If first time idle, then get the number of idlers to run.
+                // Idle handles only run if the queue is empty or if the first message
+                // in the queue (possibly a barrier) is due to be handled in the future.
+                if (pendingIdleHandlerCount < 0
+                        && (mMessages == null || now < mMessages.when)) {
+                    pendingIdleHandlerCount = mIdleHandlers.size();
+                }
+                if (pendingIdleHandlerCount <= 0) {
+                    // No idle handlers to run.  Loop and wait some more.
+                    mBlocked = true;
+                    continue;
+                }
+
+                if (mPendingIdleHandlers == null) {
+                    mPendingIdleHandlers = new IdleHandler[Math.max(pendingIdleHandlerCount, 4)];
+                }
+                mPendingIdleHandlers = mIdleHandlers.toArray(mPendingIdleHandlers);
+            }
+
+            // Run the idle handlers.
+            // We only ever reach this code block during the first iteration.
+            for (int i = 0; i < pendingIdleHandlerCount; i++) {
+                final IdleHandler idler = mPendingIdleHandlers[i];
+                mPendingIdleHandlers[i] = null; // release the reference to the handler
+
+                boolean keep = false;
+                try {
+                    keep = idler.queueIdle();
+                } catch (Throwable t) {
+                    Log.wtf(TAG, "IdleHandler threw exception", t);
+                }
+
+                if (!keep) {
+                    synchronized (this) {
+                        mIdleHandlers.remove(idler);
+                    }
+                }
+            }
+
+            // Reset the idle handler count to 0 so we do not run them again.
+            pendingIdleHandlerCount = 0;
+
+            // While calling an idle handler, a new message could have been delivered
+            // so go back and look again for a pending message without waiting.
+            nextPollTimeoutMillis = 0;
+        }
+    }
+    
+先看一下MessageQueue进message
+
+boolean enqueueMessage(Message msg, long when) {
+        if (msg.target == null) {
+            throw new IllegalArgumentException("Message must have a target.");
+        }
+        if (msg.isInUse()) {
+            throw new IllegalStateException(msg + " This message is already in use.");
+        }
+
+        synchronized (this) {
+            if (mQuitting) {
+                IllegalStateException e = new IllegalStateException(
+                        msg.target + " sending message to a Handler on a dead thread");
+                Log.w(TAG, e.getMessage(), e);
+                msg.recycle();
+                return false;
+            }
+
+            msg.markInUse();
+            msg.when = when;
+            Message p = mMessages;
+            boolean needWake;
+            if (p == null || when == 0 || when < p.when) {
+                // New head, wake up the event queue if blocked.
+                msg.next = p;
+                mMessages = msg;
+                needWake = mBlocked;
+            } else {
+                // Inserted within the middle of the queue.  Usually we don't have to wake
+                // up the event queue unless there is a barrier at the head of the queue
+                // and the message is the earliest asynchronous message in the queue.
+                needWake = mBlocked && p.target == null && msg.isAsynchronous();
+                Message prev;
+                for (;;) {
+                    prev = p;
+                    p = p.next;
+                    if (p == null || when < p.when) {
+                        break;
+                    }
+                    if (needWake && p.isAsynchronous()) {
+                        needWake = false;
+                    }
+                }
+                msg.next = p; // invariant: p == prev.next
+                prev.next = msg;
+            }
+
+            // We can assume mPtr != 0 because mQuitting is false.
+            if (needWake) {
+                nativeWake(mPtr);
+            }
+        }
+        return true;
+    }
+    
+MessageQueue.enqueueMessage（）主要做的就是msg进队列。mMessages是队列头部，MessageQueue按照msg.when时间排序插入msg
+
+继续查看MessageQueue.next()源码，发现主要逻辑就是和now时间对比取出头部的msg，然后把mMessages = msg.next，msg.next = null。然后又重新生成队列头部，一直循环取出，不符合条件就进入阻塞。
+
+回过头来再看Looper.loop（）函数，分析过messageQueue.next（），下面看一下msg.target.dispatchMessage(msg);
+
+msg.target是什么呢？
+
+回过头再看一下Handler.sendMessage().
+
+public final boolean sendMessage(Message msg)
+    {
+        return sendMessageDelayed(msg, 0);
+    }
+}
+
+人后一步步调用会调用到Handler.enqueueMessage（）。
+
+private boolean enqueueMessage(MessageQueue queue, Message msg, long uptimeMillis) {
+        msg.target = this;
+        if (mAsynchronous) {
+            msg.setAsynchronous(true);
+        }
+        return queue.enqueueMessage(msg, uptimeMillis);
+    }
+
+看到了把msg.target = this = handler
+
+msg.target.dispatchMessage(msg);
+
+public void dispatchMessage(Message msg) {
+        if (msg.callback != null) {
+            handleCallback(msg);
+        } else {
+            if (mCallback != null) {
+                if (mCallback.handleMessage(msg)) {
+                    return;
+                }
+            }
+            handleMessage(msg);
+        }
+ }
+ 
+msg.callback后面再看，先分析没有callback的，会调用到handlerMessage函数
+ 
+Handler handler = new Handler(){
+            @Override
+            public void handleMessage(Message msg) {
+                super.handleMessage(msg);
+            }
+  };
+  
+handlerMessage正好是咱们自己创建handler的回调，在主线程创建的handler，handlerMessage就是在主线程中运行。
+  
+msg.callback其实就是在异步线程中运行，下面分析下源码
+ 
+handler.post(new Runnable() {
+            @Override
+            public void run() {
+                
+            }
+});
+
+看一下handler.post源码
+
+public final boolean post(Runnable r){
+       return  sendMessageDelayed(getPostMessage(r), 0);
+}
+
+private static Message getPostMessage(Runnable r) {
+        Message m = Message.obtain();
+        m.callback = r;
+        return m;
+}
+
+发现在组装message的时候把runnable指给了message.callback
+
+public void dispatchMessage(Message msg) {
+        if (msg.callback != null) {
+            handleCallback(msg);
+        } else {
+            if (mCallback != null) {
+                if (mCallback.handleMessage(msg)) {
+                    return;
+                }
+            }
+            handleMessage(msg);
+        }
+}
+
+private static void handleCallback(Message message) {
+        message.callback.run();
+}
+
+然后看一下Activity的runOnUiThread
+runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                
+            }
+});
+
+调用到了Activity的
+public final void runOnUiThread(Runnable action) {
+        if (Thread.currentThread() != mUiThread) {
+            mHandler.post(action);
+        } else {
+            action.run();
+        }
+ }
+ 
+判断如果是主线程，走到了handler.post（runnable），如果是异步的，直接run（）方法执行。
+
+最后看一下View.post
+
+btn.post(new Runnable() {
+            @Override
+            public void run() {
+                
+            }
+ });
+ 
+public boolean post(Runnable action) {
+        final AttachInfo attachInfo = mAttachInfo;
+        if (attachInfo != null) {
+            return attachInfo.mHandler.post(action);
+        }
+        // Assume that post will succeed later
+        ViewRootImpl.getRunQueue().post(action);
+        return true;
+}
+
+static final class RunQueue {
+        private final ArrayList<HandlerAction> mActions = new ArrayList<HandlerAction>();
+
+        void post(Runnable action) {
+            postDelayed(action, 0);
+        }
+
+        void postDelayed(Runnable action, long delayMillis) {
+            HandlerAction handlerAction = new HandlerAction();
+            handlerAction.action = action;
+            handlerAction.delay = delayMillis;
+
+            synchronized (mActions) {
+                mActions.add(handlerAction);
+            }
+        }
+
+        .....
+        void executeActions(Handler handler) {
+            synchronized (mActions) {
+                final ArrayList<HandlerAction> actions = mActions;
+                final int count = actions.size();
+
+                for (int i = 0; i < count; i++) {
+                    final HandlerAction handlerAction = actions.get(i);
+                    handler.postDelayed(handlerAction.action, handlerAction.delay);
+                }
+
+                actions.clear();
+            }
+        }
+
+        ......
+ }
+
+最后会走到handler.postDelayed(handlerAction.action, handlerAction.delay);，handlerAction.action就是view.post（runnable）里的runnable
+
+发现最后又走到了handler.post（runnable）
+
