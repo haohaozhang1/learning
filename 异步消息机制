@@ -484,3 +484,15 @@ static final class RunQueue {
 
 发现最后又走到了handler.post（runnable）
 
+总结
+
+已经大概梳理了一下Handler的消息机制，以及post方法和我们常用的sendMessage方法的区别。来总结一下，主要涉及四个类Handler、Message、MessageQueue、Looper：
+
+新建Handler，通过sendMessage或者post发送消息，Handler调用sendMessageAtTime将Message交给MessageQueue
+
+MessageQueue.enqueueMessage方法将Message以链表的形式放入队列中
+
+Looper的loop方法循环调用MessageQueue.next()取出消息，并且调用Handler的dispatchMessage来处理消息
+
+在dispatchMessage中，分别判断msg.callback、mCallback也就是post方法或者构造方法传入的不为空就执行他们的回调，如果都为空就执行我们最常用重写的handleMessage
+
