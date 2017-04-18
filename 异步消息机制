@@ -495,4 +495,4 @@ MessageQueue.enqueueMessage方法将Message以链表的形式放入队列中
 Looper的loop方法循环调用MessageQueue.next()取出消息，并且调用Handler的dispatchMessage来处理消息
 
 在dispatchMessage中，分别判断msg.callback、mCallback也就是post方法或者构造方法传入的不为空就执行他们的回调，如果都为空就执行我们最常用重写的handleMessage
-
+ 
