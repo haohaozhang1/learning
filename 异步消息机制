@@ -2,7 +2,9 @@
 
 建Handler类之前必须先Looper.prepare()。然而在主线程可以直接new Handler()，因为APP启动入口是ActivityThread.main函数源码
 
+```java
 public static final void main(String[] args) {
+
         SamplingProfilerIntegration.start();
 
         Process.setArgV0("<pre-initialized>");
@@ -33,7 +35,7 @@ public static final void main(String[] args) {
         Slog.i(TAG, "Main thread of " + name + " is now exiting");
     }
 }
-
+```
 发现主线程/UI线程已经Looper.prepareMainLooper()。
 
 为什么在new Handler()之前为什么要先Loop.prepare(),查看Handler初始化源码
