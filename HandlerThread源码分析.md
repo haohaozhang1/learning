@@ -120,7 +120,10 @@ handlerThread.quit();
 **总结：**
 
  **1. HandlerThread是一个实现了Looper.prapare()和Looper.loop()的子线程。**
+ 
  **2. HandlerThead解决了不断的new Thread()来创建子线程做耗时操作，可以优化性能**
+ 
  **3. HandlerThread可以解决子线程和主线程交互，也可以解决子线程和子线程的交互**
+ 
  **4. 不用的时候一定要调用quit()。**
 
