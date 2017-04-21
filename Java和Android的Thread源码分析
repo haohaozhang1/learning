@@ -1,0 +1,513 @@
+首先看一下Thread的类和状态
+
+```java
+public class Thread implements Runnable {
+    .....
+    /**
+     * A representation of a thread's state. A given thread may only be in one
+     * state at a time.
+     */
+    public enum State {
+        /**
+         * The thread has been created, but has never been started.
+         */
+        NEW,
+        /**
+         * The thread may be run.
+         */
+        RUNNABLE,
+        /**
+         * The thread is blocked and waiting for a lock.
+         */
+        BLOCKED,
+        /**
+         * The thread is waiting.
+         */
+        WAITING,
+        /**
+         * The thread is waiting for a specified amount of time.
+         */
+        TIMED_WAITING,
+        /**
+         * The thread has been terminated.
+         */
+        TERMINATED
+    }
+
+    /**
+     * The maximum priority value allowed for a thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY}.
+     */
+    public static final int MAX_PRIORITY = 10;
+
+    /**
+     * The minimum priority value allowed for a thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_LOWEST}.
+     */
+    public static final int MIN_PRIORITY = 1;
+
+    /**
+     * The normal (default) priority value assigned to the main thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_DEFAULT}.
+
+     */
+    public static final int NORM_PRIORITY = 5;
+```
+发现thread实现了Runnable接口，thread定义了6种状态，在某一时间只能有一种状态
+
+ **1. NEW  线程刚被创建还没有start**
+ **2. RUNNABLE  线程调用了start run将要方法执行**
+ **3. BLOCKED 线程被堵塞，等待拿到锁**
+ **4. WAITING 等待**
+ **5. TIMED_WAITING  线程等待指定的时间**
+ **6. TERMINATED 线程已经被终止**
+ 
+**thread可以设置优先级，最高为MAX_PRIORITY = 10;最低为MIN_PRIORITY = 1;默认为NORM_PRIORITY = 5;级别越高越有限执行**
+
+```java
+volatile ThreadGroup group;
+volatile boolean daemon;
+volatile String name;
+volatile int priority;
+volatile long stackSize;
+Runnable target;
+private static int count = 0;
+
+/**
+ * Holds the thread's ID. We simply count upwards, so
+ * each Thread has a unique ID.
+ */
+private long id;
+
+/**
+ * Normal thread local values.
+ */
+ThreadLocal.Values localValues;
+
+```
+分析一下这些参数：
+
+ * **ThreadGroup，线程组，线程组是线程的集合，线程组组成了一个树，除了初始线程组，每个线程组都有一个parent线程组；**
+ * **daemon 当前线程是不是守护线程，守护线程只会在没有非守护线程运行的情况下才会运行；**
+ * **name 线程名字;**
+ * **priority 线程优先级;**
+ * **stackSize 线程栈大小，默认为 0，即使用默认的线程栈大小（由 dalvik 中的全局变量 gDvm.stackSize 决定）；**
+ * **target 一个 Runnable 对象，Thread 的 run() 方法中会转掉该 target 的 run() 方法，这是线程真正处理事务的地方；**
+ * **id 线程 id，通过递增 count 得到该id，如果没有显示给线程设置名字，那么就会使用 Thread+id 当作线程的名字。注意这不是真正意义上的线程 id，即在 logcat 中打印的 tid 并不是这个 id，那 tid 是指 dalvik 线程的 id；**
+ * **localValues 线程本地存储（TLS）数据；**
+
+下面看一下thread的构造函数
+
+```java
+public Thread() {
+     create(null, null, null, 0);
+ }
+ public Thread(Runnable runnable) {
+     create(null, runnable, null, 0);
+ }
+ public Thread(Runnable runnable, String threadName) {
+     if (threadName == null) {
+         throw new NullPointerException("threadName == null");
+     }
+
+     create(null, runnable, threadName, 0);
+ }
+ public Thread(String threadName) {
+     if (threadName == null) {
+         throw new NullPointerException("threadName == null");
+     }
+
+     create(null, null, threadName, 0);
+ }
+ public Thread(ThreadGroup group, Runnable runnable) {
+     create(group, runnable, null, 0);
+ }
+```
+
+**发现最终都会走到create（group, runnable, null, 0）里，看一下create里面的源码**
+
+```java
+private void create(ThreadGroup group, Runnable runnable, String threadName, long stackSize) {
+        Thread currentThread = Thread.currentThread();
+        if (group == null) {
+            group = currentThread.getThreadGroup();
+        }
+
+        if (group.isDestroyed()) {
+            throw new IllegalThreadStateException("Group already destroyed");
+        }
+
+        this.group = group;
+
+        synchronized (Thread.class) {
+            id = ++Thread.count;
+        }
+
+        if (threadName == null) {
+            this.name = "Thread-" + id;
+        } else {
+            this.name = threadName;
+        }
+
+        this.target = runnable;
+        this.stackSize = stackSize;
+
+        this.priority = currentThread.getPriority();
+
+        this.contextClassLoader = currentThread.contextClassLoader;
+
+        // Transfer over InheritableThreadLocals.
+        if (currentThread.inheritableValues != null) {
+            inheritableValues = new ThreadLocal.Values(currentThread.inheritableValues);
+        }
+
+        // add ourselves to our ThreadGroup of choice
+        this.group.addThread(this);
+    }
+```
+
+第2行调用到了public static native Thread currentThread();这是一个native方法调用到了底层的代码；
+获取当前线程；每个线程都是通过dalvik来创建的，然后通过Dalvik和Android Thread关联起来。
+
+第3-11行是对threadGroup的逻辑判断
+
+第13-15行 加了同步机制，thread的id会递增的，这个thread id不是真正的id，真正的id在Dalvik层
+
+第17-21行 对threadName初始化
+
+下面都是简单的初始化
+
+最后一行 是把当前thread加入到group里
+
+**public static native Thread currentThread(); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_currentThread 方法：**
+```java
+static void Dalvik_java_lang_VMThread_currentThread(const u4* args,
+    JValue* pResult)
+{
+    UNUSED_PARAMETER(args);
+
+    RETURN_PTR(dvmThreadSelf()->threadObj);
+}
+```
+**该方法里的 dvmThreadSelf() 方法定义在 android/dalvik/vm/Thread.cpp 中：**
+```java
+Thread* dvmThreadSelf()
+{
+    return (Thread*) pthread_getspecific(gDvm.pthreadKeySelf);
+}
+```
+**从上面的调用栈可以看到，每一个 dalvik 线程都会将自身存放在key 为 pthreadKeySelf 的线程本地存储中，获取当前线程时，只需要根据这个 key 查询获取即可，dalvik Thread 有一个名为 threadObj 的成员变量：**
+
+    /* the java/lang/Thread that we are associated with */
+    Object*     threadObj;
+
+**dalvik Thread 这个成员变量 threadObj 关联的就是对应的 Android Thread 对象，所以通过 native 方法 VMThread.currentThread() 返回的是存储在 TLS 中的当前 dalvik 线程对应的 Android Thread。**
+**接着分析上面的代码，如果没有给新线程指定 group 那么就会指定 group 为当前线程所在的 group 中，然后给新线程设置 name，priority 等。最后通过调用 ThreadGroup 的 addThread 方法将新线程添加到 group 中：**
+
+```java
+/**
+ * Called by the Thread constructor.
+ */
+final void addThread(Thread thread) throws IllegalThreadStateException {
+    synchronized (threadRefs) {
+        if (isDestroyed) {
+            throw new IllegalThreadStateException();
+        }
+        threadRefs.add(new WeakReference<Thread>(thread));
+    }
+}
+```
+**ThreadGroup 的代码相对简单，它有一个名为 threadRefs 的列表，持有属于同一组的 thread 引用，可以对一组 thread 进行一些线程操作。**
+**上面分析的是 Android Thread 的构造过程，从上面的分析可以看出，Android Thread 的构造方法仅仅是设置了一些线程属性，并没有真正去创建一个新的 dalvik Thread，dalvik Thread 创建过程要等到客户代码调用 Android Thread 的 start() 方法才会进行。下面我们来分析 Java Thread 的 start() 方法：**
+
+```java
+public synchronized void start() {
+        checkNotStarted();
+
+        hasBeenStarted = true;
+
+        nativeCreate(this, stackSize, daemon);
+    }
+```
+**Android Thread 的 start 方法很简单，仅仅是转调 nativeCreate(Thread t, long stackSize, boolean daemon); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_create 方法：**
+
+```java
+static void Dalvik_java_lang_VMThread_create(const u4* args, JValue* pResult)
+{
+    Object* threadObj = (Object*) args[0];
+    s8 stackSize = GET_ARG_LONG(args, 1);
+
+    /* copying collector will pin threadObj for us since it was an argument */
+    dvmCreateInterpThread(threadObj, (int) stackSize);
+    RETURN_VOID();
+}
+```
+**dvmCreateInterpThread 的实现在 Thread.cpp 中，由于这个函数的内容很长，在这里只列出关键的地方：**
+```java
+bool dvmCreateInterpThread(Object* threadObj, int reqStackSize)
+{
+    Thread* self = dvmThreadSelf();
+    ...
+    Thread* newThread = allocThread(stackSize); 
+    newThread->threadObj = threadObj;
+    ...
+    Object* vmThreadObj = dvmAllocObject(gDvm.classJavaLangVMThread, ALLOC_DEFAULT);
+    dvmSetFieldInt(vmThreadObj, gDvm.offJavaLangVMThread_vmData, (u4)newThread);
+    dvmSetFieldObject(threadObj, gDvm.offJavaLangThread_vmThread, vmThreadObj);
+    ...
+    pthread_t threadHandle;
+    int cc = pthread_create(&threadHandle, &threadAttr, interpThreadStart, newThread);
+
+    /*
+     * Tell the new thread to start.
+     *
+     * We must hold the thread list lock before messing with another thread.
+     * In the general case we would also need to verify that newThread was
+     * still in the thread list, but in our case the thread has not started
+     * executing user code and therefore has not had a chance to exit.
+     *
+     * We move it to VMWAIT, and it then shifts itself to RUNNING, which
+     * comes with a suspend-pending check.
+     */
+    dvmLockThreadList(self);
+
+    assert(newThread->status == THREAD_STARTING);
+    newThread->status = THREAD_VMWAIT;
+    pthread_cond_broadcast(&gDvm.threadStartCond);
+
+    dvmUnlockThreadList();
+    ...
+}
+
+/*
+ * Alloc and initialize a Thread struct.
+ *
+ * Does not create any objects, just stuff on the system (malloc) heap.
+ */
+static Thread* allocThread(int interpStackSize)
+{
+    Thread* thread;
+    thread = (Thread*) calloc(1, sizeof(Thread));
+    ...
+    thread->status = THREAD_INITIALIZING;
+}
+```
+首先，通过调用 allocThread 创建一个名为 newThread 的 dalvik Thread  并设置一些属性，将设置其成员变量 threadObj 为传入的 Android Thread，这样 dalvik Thread 就与Android Thread 关联起来了；然后创建一个名为 vmThreadObj 的 VMThread 对象，设置其成员变量 vmData 为 newThread，设置 Android Thread threadObj 的成员变量 vmThread 为这个 vmThreadObj，这样 Android Thread 通过 VMThread 的成员变量 vmData 就和 dalvik Thread 关联起来了。
+然后，通过 pthread_create 创建 pthread 线程，并让这个线程 start，这样就会进入该线程的 thread entry 运行，下来我们来看新线程的 thread entry 方法 interpThreadStart，同样只列出关键的地方：
+
+```java
+/*
+ * pthread entry function for threads started from interpreted code.
+ */
+static void* interpThreadStart(void* arg)
+{
+    Thread* self = (Thread*) arg;
+
+    std::string threadName(dvmGetThreadName(self));
+    setThreadName(threadName.c_str());
+
+    /*
+     * Finish initializing the Thread struct.
+     */
+    dvmLockThreadList(self);
+    prepareThread(self);
+
+    while (self->status != THREAD_VMWAIT)
+        pthread_cond_wait(&gDvm.threadStartCond, &gDvm.threadListLock);
+
+    dvmUnlockThreadList();
+
+    /*
+     * Add a JNI context.
+     */
+    self->jniEnv = dvmCreateJNIEnv(self);
+
+    /*
+     * Change our state so the GC will wait for us from now on.  If a GC is
+     * in progress this call will suspend us.
+     */
+    dvmChangeStatus(self, THREAD_RUNNING);
+
+    /*
+     * Execute the "run" method.
+     *
+     * At this point our stack is empty, so somebody who comes looking for
+     * stack traces right now won‘t have much to look at.  This is normal.
+     */
+    Method* run = self->threadObj->clazz->vtable[gDvm.voffJavaLangThread_run];
+    JValue unused;
+
+    ALOGV("threadid=%d: calling run()", self->threadId);
+    assert(strcmp(run->name, "run") == 0);
+    dvmCallMethod(self, run, self->threadObj, &unused);
+    ALOGV("threadid=%d: exiting", self->threadId);
+
+    /*
+     * Remove the thread from various lists, report its death, and free
+     * its resources.
+     */
+    dvmDetachCurrentThread();
+
+    return NULL;
+}
+
+/*
+ * Finish initialization of a Thread struct.
+ *
+ * This must be called while executing in the new thread, but before the
+ * thread is added to the thread list.
+ *
+ * NOTE: The threadListLock must be held by the caller (needed for
+ * assignThreadId()).
+ */
+static bool prepareThread(Thread* thread)
+{
+    assignThreadId(thread);
+    thread->handle = pthread_self();
+    thread->systemTid = dvmGetSysThreadId();
+
+    setThreadSelf(thread);
+    ...
+
+    return true;
+}
+
+/*
+ * Explore our sense of self.  Stuffs the thread pointer into TLS.
+ */
+static void setThreadSelf(Thread* thread)
+{
+    int cc;
+
+    cc = pthread_setspecific(gDvm.pthreadKeySelf, thread);
+    ...
+}
+```
+**在新线程的 thread entry 方法 interpThreadStart 中，首先设置线程的名字，然后通过调用 prepareThread 设置线程 id 以及其它一些属性，并调用 setThreadSelf 将新 dalvik Thread 自身保存在 TLS 中，这样之后就能通过  dvmThreadSelf 方法从 TLS 中获取它。然后修改状态为 THREAD_RUNNING，并调用对应 Android Thread 的 run 方法，运行客户代码：**
+```java
+    public void run() {
+        if (target != null) {
+            target.run();
+        }
+    }
+```
+
+**对于继承自 Android Thread 带有 Looper 的 Android HandlerThread 来说，会调用它覆写 run 方法()，不懂的可以看一下上一篇内容**[HandlerThread源码分析](http://blog.csdn.net/android_text/article/details/70231214)
+```java
+    public void run() {
+        mTid = Process.myTid();
+        Looper.prepare();
+        synchronized (this) {
+            mLooper = Looper.myLooper();
+            notifyAll();
+        }
+        Process.setThreadPriority(mPriority);
+        onLooperPrepared();
+        Looper.loop();
+        mTid = -1;
+    }
+```
+target 在前面已经做了介绍，它是线程真正处理逻辑事务的地方。一旦逻辑事务处理完毕从 run 中返回，线程就会回到 interpThreadStart 方法中，继续执行 dvmDetachCurrentThread 方法：
+
+```java
+/*
+ * Detach the thread from the various data structures, notify other threads
+ * that are waiting to "join" it, and free up all heap-allocated storage.
+ * /
+void dvmDetachCurrentThread()
+{
+    Thread* self = dvmThreadSelf();
+    Object* vmThread;
+    Object* group;
+    ...
+    group = dvmGetFieldObject(self->threadObj, gDvm.offJavaLangThread_group);
+
+    /*
+     * Remove the thread from the thread group.
+     */
+    if (group != NULL) {
+        Method* removeThread =
+            group->clazz->vtable[gDvm.voffJavaLangThreadGroup_removeThread];
+        JValue unused;
+        dvmCallMethod(self, removeThread, group, &unused, self->threadObj);
+    }
+
+    /*
+     * Clear the vmThread reference in the Thread object.  Interpreted code
+     * will now see that this Thread is not running.  As this may be the
+     * only reference to the VMThread object that the VM knows about, we
+     * have to create an internal reference to it first.
+     */
+    vmThread = dvmGetFieldObject(self->threadObj,
+                    gDvm.offJavaLangThread_vmThread);
+    dvmAddTrackedAlloc(vmThread, self);
+    dvmSetFieldObject(self->threadObj, gDvm.offJavaLangThread_vmThread, NULL);
+
+    /* clear out our struct Thread pointer, since it‘s going away */
+    dvmSetFieldObject(vmThread, gDvm.offJavaLangVMThread_vmData, NULL);
+
+    ...
+
+    /*
+     * Thread.join() is implemented as an Object.wait() on the VMThread
+     * object.  Signal anyone who is waiting.
+     */
+    dvmLockObject(self, vmThread);
+    dvmObjectNotifyAll(self, vmThread);
+    dvmUnlockObject(self, vmThread);
+
+    dvmReleaseTrackedAlloc(vmThread, self);
+    vmThread = NULL;
+
+    ...
+
+    dvmLockThreadList(self);
+
+    /*
+     * Lose the JNI context.
+     */
+    dvmDestroyJNIEnv(self->jniEnv);
+    self->jniEnv = NULL;
+
+    self->status = THREAD_ZOMBIE;
+
+    /*
+     * Remove ourselves from the internal thread list.
+     */
+    unlinkThread(self);
+
+    ...
+
+    releaseThreadId(self);
+    dvmUnlockThreadList();
+
+    setThreadSelf(NULL);
+
+    freeThread(self);
+}
+
+/*
+ * Free a Thread struct, and all the stuff allocated within.
+ */
+static void freeThread(Thread* thread)
+{
+    ...
+    free(thread);
+}
+```
+在 dvmDetachCurrentThread 函数里，首先获取当前线程 self，这里获得的就是当前执行 thread entry 的新线程，然后通过其对应的 Android Thread 对象 threadObj 获取该对象所在 group，然后将 threadObj 这个 Android Thread 对象从 group 中移除；接着清除 Android 与 dalvik 线程之间的关联关系，并通知 join 该线程的其它线程；最后，设置线程状态为 THREAD_ZOMBIE，清除 TLS 中存储的线程值，并通过调用 freeThread 释放内存，至此线程就终结了。
+
+```java
+public final void join() throws InterruptedException {
+        synchronized (lock) {
+            while (isAlive()) {
+                lock.wait();
+            }
+        }
+    }
+```
+第2行对当前线程lock加锁机制
+第4行让当前线程堵塞 wait
