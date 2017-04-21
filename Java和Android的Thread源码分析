@@ -1,6 +1,6 @@
 首先看一下Thread的类和状态
 
-```
+
 public class Thread implements Runnable {
     .....
     /**
@@ -55,7 +55,7 @@ public class Thread implements Runnable {
 
      */
     public static final int NORM_PRIORITY = 5;
-```
+
 发现thread实现了Runnable接口，thread定义了6种状态，在某一时间只能有一种状态
 
  **1. NEW  线程刚被创建还没有start**
@@ -67,7 +67,7 @@ public class Thread implements Runnable {
  
 **thread可以设置优先级，最高为MAX_PRIORITY = 10;最低为MIN_PRIORITY = 1;默认为NORM_PRIORITY = 5;级别越高越有限执行**
 
-```
+
 volatile ThreadGroup group;
 volatile boolean daemon;
 volatile String name;
@@ -129,7 +129,7 @@ public Thread() {
 
 **发现最终都会走到create（group, runnable, null, 0）里，看一下create里面的源码**
 
-```
+
 private void create(ThreadGroup group, Runnable runnable, String threadName, long stackSize) {
         Thread currentThread = Thread.currentThread();
         if (group == null) {
@@ -167,7 +167,7 @@ private void create(ThreadGroup group, Runnable runnable, String threadName, lon
         // add ourselves to our ThreadGroup of choice
         this.group.addThread(this);
     }
-```
+
 
 第2行调用到了public static native Thread currentThread();这是一个native方法调用到了底层的代码；
 获取当前线程；每个线程都是通过dalvik来创建的，然后通过Dalvik和Android Thread关联起来。
@@ -182,8 +182,8 @@ private void create(ThreadGroup group, Runnable runnable, String threadName, lon
 
 最后一行 是把当前thread加入到group里
 
-**public static native Thread currentThread(); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_currentThread 方法：**
-```
+public static native Thread currentThread(); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_currentThread 方法：**
+
 static void Dalvik_java_lang_VMThread_currentThread(const u4* args,
     JValue* pResult)
 {
@@ -192,22 +192,22 @@ static void Dalvik_java_lang_VMThread_currentThread(const u4* args,
     RETURN_PTR(dvmThreadSelf()->threadObj);
 }
 ```
-**该方法里的 dvmThreadSelf() 方法定义在 android/dalvik/vm/Thread.cpp 中：**
-```
+该方法里的 dvmThreadSelf() 方法定义在 android/dalvik/vm/Thread.cpp 中：**
+
 Thread* dvmThreadSelf()
 {
     return (Thread*) pthread_getspecific(gDvm.pthreadKeySelf);
 }
 ```
-**从上面的调用栈可以看到，每一个 dalvik 线程都会将自身存放在key 为 pthreadKeySelf 的线程本地存储中，获取当前线程时，只需要根据这个 key 查询获取即可，dalvik Thread 有一个名为 threadObj 的成员变量：**
+从上面的调用栈可以看到，每一个 dalvik 线程都会将自身存放在key 为 pthreadKeySelf 的线程本地存储中，获取当前线程时，只需要根据这个 key 查询获取即可，dalvik Thread 有一个名为 threadObj 的成员变量：
 
     /* the java/lang/Thread that we are associated with */
     Object*     threadObj;
 
-**dalvik Thread 这个成员变量 threadObj 关联的就是对应的 Android Thread 对象，所以通过 native 方法 VMThread.currentThread() 返回的是存储在 TLS 中的当前 dalvik 线程对应的 Android Thread。**
-**接着分析上面的代码，如果没有给新线程指定 group 那么就会指定 group 为当前线程所在的 group 中，然后给新线程设置 name，priority 等。最后通过调用 ThreadGroup 的 addThread 方法将新线程添加到 group 中：**
+dalvik Thread 这个成员变量 threadObj 关联的就是对应的 Android Thread 对象，所以通过 native 方法 VMThread.currentThread() 返回的是存储在 TLS 中的当前 dalvik 线程对应的 Android Thread。
+接着分析上面的代码，如果没有给新线程指定 group 那么就会指定 group 为当前线程所在的 group 中，然后给新线程设置 name，priority 等。最后通过调用 ThreadGroup 的 addThread 方法将新线程添加到 group 中：
 
-```
+
 /**
  * Called by the Thread constructor.
  */
@@ -219,11 +219,11 @@ final void addThread(Thread thread) throws IllegalThreadStateException {
         threadRefs.add(new WeakReference<Thread>(thread));
     }
 }
-```
-**ThreadGroup 的代码相对简单，它有一个名为 threadRefs 的列表，持有属于同一组的 thread 引用，可以对一组 thread 进行一些线程操作。**
-**上面分析的是 Android Thread 的构造过程，从上面的分析可以看出，Android Thread 的构造方法仅仅是设置了一些线程属性，并没有真正去创建一个新的 dalvik Thread，dalvik Thread 创建过程要等到客户代码调用 Android Thread 的 start() 方法才会进行。下面我们来分析 Java Thread 的 start() 方法：**
 
-```
+ThreadGroup 的代码相对简单，它有一个名为 threadRefs 的列表，持有属于同一组的 thread 引用，可以对一组 thread 进行一些线程操作。**
+上面分析的是 Android Thread 的构造过程，从上面的分析可以看出，Android Thread 的构造方法仅仅是设置了一些线程属性，并没有真正去创建一个新的 dalvik Thread，dalvik Thread 创建过程要等到客户代码调用 Android Thread 的 start() 方法才会进行。下面我们来分析 Java Thread 的 start() 方法：**
+
+
 public synchronized void start() {
         checkNotStarted();
 
@@ -231,10 +231,10 @@ public synchronized void start() {
 
         nativeCreate(this, stackSize, daemon);
     }
-```
-**Android Thread 的 start 方法很简单，仅仅是转调 nativeCreate(Thread t, long stackSize, boolean daemon); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_create 方法：**
 
-```
+Android Thread 的 start 方法很简单，仅仅是转调 nativeCreate(Thread t, long stackSize, boolean daemon); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_create 方法：**
+
+
 static void Dalvik_java_lang_VMThread_create(const u4* args, JValue* pResult)
 {
     Object* threadObj = (Object*) args[0];
@@ -244,9 +244,9 @@ static void Dalvik_java_lang_VMThread_create(const u4* args, JValue* pResult)
     dvmCreateInterpThread(threadObj, (int) stackSize);
     RETURN_VOID();
 }
-```
-**dvmCreateInterpThread 的实现在 Thread.cpp 中，由于这个函数的内容很长，在这里只列出关键的地方：**
-```
+
+dvmCreateInterpThread 的实现在 Thread.cpp 中，由于这个函数的内容很长，在这里只列出关键的地方：**
+
 bool dvmCreateInterpThread(Object* threadObj, int reqStackSize)
 {
     Thread* self = dvmThreadSelf();
@@ -294,11 +294,11 @@ static Thread* allocThread(int interpStackSize)
     ...
     thread->status = THREAD_INITIALIZING;
 }
-```
+
 首先，通过调用 allocThread 创建一个名为 newThread 的 dalvik Thread  并设置一些属性，将设置其成员变量 threadObj 为传入的 Android Thread，这样 dalvik Thread 就与Android Thread 关联起来了；然后创建一个名为 vmThreadObj 的 VMThread 对象，设置其成员变量 vmData 为 newThread，设置 Android Thread threadObj 的成员变量 vmThread 为这个 vmThreadObj，这样 Android Thread 通过 VMThread 的成员变量 vmData 就和 dalvik Thread 关联起来了。
 然后，通过 pthread_create 创建 pthread 线程，并让这个线程 start，这样就会进入该线程的 thread entry 运行，下来我们来看新线程的 thread entry 方法 interpThreadStart，同样只列出关键的地方：
 
-```
+
 /*
  * pthread entry function for threads started from interpreted code.
  */
@@ -385,8 +385,8 @@ static void setThreadSelf(Thread* thread)
     cc = pthread_setspecific(gDvm.pthreadKeySelf, thread);
     ...
 }
-```
-**在新线程的 thread entry 方法 interpThreadStart 中，首先设置线程的名字，然后通过调用 prepareThread 设置线程 id 以及其它一些属性，并调用 setThreadSelf 将新 dalvik Thread 自身保存在 TLS 中，这样之后就能通过  dvmThreadSelf 方法从 TLS 中获取它。然后修改状态为 THREAD_RUNNING，并调用对应 Android Thread 的 run 方法，运行客户代码：**
+
+在新线程的 thread entry 方法 interpThreadStart 中，首先设置线程的名字，然后通过调用 prepareThread 设置线程 id 以及其它一些属性，并调用 setThreadSelf 将新 dalvik Thread 自身保存在 TLS 中，这样之后就能通过  dvmThreadSelf 方法从 TLS 中获取它。然后修改状态为 THREAD_RUNNING，并调用对应 Android Thread 的 run 方法，运行客户代码：**
 
     public void run() {
         if (target != null) {
@@ -395,7 +395,7 @@ static void setThreadSelf(Thread* thread)
     }
 
 
-**对于继承自 Android Thread 带有 Looper 的 Android HandlerThread 来说，会调用它覆写 run 方法()，不懂的可以看一下上一篇内容**[HandlerThread源码分析](http://blog.csdn.net/android_text/article/details/70231214)
+对于继承自 Android Thread 带有 Looper 的 Android HandlerThread 来说，会调用它覆写 run 方法()，不懂的可以看一下上一篇内容**[HandlerThread源码分析](http://blog.csdn.net/android_text/article/details/70231214)
 
     public void run() {
         mTid = Process.myTid();
@@ -412,7 +412,7 @@ static void setThreadSelf(Thread* thread)
 
 target 在前面已经做了介绍，它是线程真正处理逻辑事务的地方。一旦逻辑事务处理完毕从 run 中返回，线程就会回到 interpThreadStart 方法中，继续执行 dvmDetachCurrentThread 方法：
 
-```
+
 /*
  * Detach the thread from the various data structures, notify other threads
  * that are waiting to "join" it, and free up all heap-allocated storage.
@@ -497,10 +497,10 @@ static void freeThread(Thread* thread)
     ...
     free(thread);
 }
-```
+
 在 dvmDetachCurrentThread 函数里，首先获取当前线程 self，这里获得的就是当前执行 thread entry 的新线程，然后通过其对应的 Android Thread 对象 threadObj 获取该对象所在 group，然后将 threadObj 这个 Android Thread 对象从 group 中移除；接着清除 Android 与 dalvik 线程之间的关联关系，并通知 join 该线程的其它线程；最后，设置线程状态为 THREAD_ZOMBIE，清除 TLS 中存储的线程值，并通过调用 freeThread 释放内存，至此线程就终结了。
 
-```java
+
 public final void join() throws InterruptedException {
         synchronized (lock) {
             while (isAlive()) {
@@ -508,6 +508,6 @@ public final void join() throws InterruptedException {
             }
         }
     }
-```
+
 第2行对当前线程lock加锁机制
 第4行让当前线程堵塞 wait
