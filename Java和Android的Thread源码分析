@@ -2,68 +2,64 @@
 
 ```java
 public class Thread implements Runnable {
-    .....
-    /**
-     * A representation of a thread's state. A given thread may only be in one
-     * state at a time.
-     */
-    public enum State {
-        /**
-         * The thread has been created, but has never been started.
-         */
-        NEW,
-        /**
-         * The thread may be run.
-         */
-        RUNNABLE,
-        /**
-         * The thread is blocked and waiting for a lock.
-         */
-        BLOCKED,
-        /**
-         * The thread is waiting.
-         */
-        WAITING,
-        /**
-         * The thread is waiting for a specified amount of time.
-         */
-        TIMED_WAITING,
-        /**
-         * The thread has been terminated.
-         */
-        TERMINATED
-    }
+public enum State {
+/**
+ * The thread has been created, but has never been started.
+ */
+NEW,
+/**
+ * The thread may be run.
+ */
+RUNNABLE,
+/**
+ * The thread is blocked and waiting for a lock.
+ */
+BLOCKED,
+/**
+ * The thread is waiting.
+ */
+WAITING,
+/**
+ * The thread is waiting for a specified amount of time.
+ */
+TIMED_WAITING,
+/**
+ * The thread has been terminated.
+ */
+TERMINATED
+}
 
-    /**
-     * The maximum priority value allowed for a thread.
-     * This corresponds to (but does not have the same value as)
-     * {@code android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY}.
-     */
-    public static final int MAX_PRIORITY = 10;
+/**
+ * The maximum priority value allowed for a thread.
+ * This corresponds to (but does not have the same value as)
+ * {@code android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY}.
+ */
+public static final int MAX_PRIORITY = 10;
 
-    /**
-     * The minimum priority value allowed for a thread.
-     * This corresponds to (but does not have the same value as)
-     * {@code android.os.Process.THREAD_PRIORITY_LOWEST}.
-     */
-    public static final int MIN_PRIORITY = 1;
+/**
+ * The minimum priority value allowed for a thread.
+ * This corresponds to (but does not have the same value as)
+ * {@code android.os.Process.THREAD_PRIORITY_LOWEST}.
+ */
+public static final int MIN_PRIORITY = 1;
 
-    /**
-     * The normal (default) priority value assigned to the main thread.
-     * This corresponds to (but does not have the same value as)
-     * {@code android.os.Process.THREAD_PRIORITY_DEFAULT}.
+/**
+ * The normal (default) priority value assigned to the main thread.
+ * This corresponds to (but does not have the same value as)
+ * {@code android.os.Process.THREAD_PRIORITY_DEFAULT}.
 
-     */
-    public static final int NORM_PRIORITY = 5;
+ */
+public static final int NORM_PRIORITY = 5;
 ```
+
 发现thread实现了Runnable接口，thread定义了6种状态，在某一时间只能有一种状态
 
- **1. NEW  线程刚被创建还没有start**
- **2. RUNNABLE  线程调用了start run将要方法执行**
- **3. BLOCKED 线程被堵塞，等待拿到锁**
- **4. WAITING 等待**
- **5. TIMED_WAITING  线程等待指定的时间**
- **6. TERMINATED 线程已经被终止**
+ 1. NEW  线程刚被创建还没有start
+ 2. RUNNABLE  线程调用了start run将要方法执行
+ 3. BLOCKED 线程被堵塞，等待拿到锁
+ 4. WAITING 等待
+ 5. TIMED_WAITING  线程等待指定的时间
+ 6. TERMINATED 线程已经被终止
  
 **thread可以设置优先级，最高为MAX_PRIORITY = 10;最低为MIN_PRIORITY = 1;默认为NORM_PRIORITY = 5;级别越高越有限执行**
 
