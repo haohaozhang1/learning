@@ -1,69 +1,73 @@
 首先看一下Thread的类和状态
 
-```java
-public class Thread implements Runnable {
-public enum State {
-/**
- * The thread has been created, but has never been started.
- */
-NEW,
-/**
- * The thread may be run.
- */
-RUNNABLE,
-/**
- * The thread is blocked and waiting for a lock.
- */
-BLOCKED,
-/**
- * The thread is waiting.
- */
-WAITING,
-/**
- * The thread is waiting for a specified amount of time.
- */
-TIMED_WAITING,
-/**
- * The thread has been terminated.
- */
-TERMINATED
-}
-
-/**
- * The maximum priority value allowed for a thread.
- * This corresponds to (but does not have the same value as)
- * {@code android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY}.
- */
-public static final int MAX_PRIORITY = 10;
-
-/**
- * The minimum priority value allowed for a thread.
- * This corresponds to (but does not have the same value as)
- * {@code android.os.Process.THREAD_PRIORITY_LOWEST}.
- */
-public static final int MIN_PRIORITY = 1;
-
-/**
- * The normal (default) priority value assigned to the main thread.
- * This corresponds to (but does not have the same value as)
- * {@code android.os.Process.THREAD_PRIORITY_DEFAULT}.
-
- */
-public static final int NORM_PRIORITY = 5;
 ```
+public class Thread implements Runnable {
+    .....
+    /**
+     * A representation of a thread's state. A given thread may only be in one
+     * state at a time.
+     */
+    public enum State {
+        /**
+         * The thread has been created, but has never been started.
+         */
+        NEW,
+        /**
+         * The thread may be run.
+         */
+        RUNNABLE,
+        /**
+         * The thread is blocked and waiting for a lock.
+         */
+        BLOCKED,
+        /**
+         * The thread is waiting.
+         */
+        WAITING,
+        /**
+         * The thread is waiting for a specified amount of time.
+         */
+        TIMED_WAITING,
+        /**
+         * The thread has been terminated.
+         */
+        TERMINATED
+    }
 
+    /**
+     * The maximum priority value allowed for a thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY}.
+     */
+    public static final int MAX_PRIORITY = 10;
+
+    /**
+     * The minimum priority value allowed for a thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_LOWEST}.
+     */
+    public static final int MIN_PRIORITY = 1;
+
+    /**
+     * The normal (default) priority value assigned to the main thread.
+     * This corresponds to (but does not have the same value as)
+     * {@code android.os.Process.THREAD_PRIORITY_DEFAULT}.
+
+     */
+    public static final int NORM_PRIORITY = 5;
+```
 发现thread实现了Runnable接口，thread定义了6种状态，在某一时间只能有一种状态
 
- 1. NEW  线程刚被创建还没有start
- 2. RUNNABLE  线程调用了start run将要方法执行
- 3. BLOCKED 线程被堵塞，等待拿到锁
- 4. WAITING 等待
- 5. TIMED_WAITING  线程等待指定的时间
- 6. TERMINATED 线程已经被终止
+ **1. NEW  线程刚被创建还没有start**
+ **2. RUNNABLE  线程调用了start run将要方法执行**
+ **3. BLOCKED 线程被堵塞，等待拿到锁**
+ **4. WAITING 等待**
+ **5. TIMED_WAITING  线程等待指定的时间**
+ **6. TERMINATED 线程已经被终止**
  
 **thread可以设置优先级，最高为MAX_PRIORITY = 10;最低为MIN_PRIORITY = 1;默认为NORM_PRIORITY = 5;级别越高越有限执行**
 
-```java
+```
 volatile ThreadGroup group;
 volatile boolean daemon;
 volatile String name;
@@ -97,7 +101,7 @@ ThreadLocal.Values localValues;
 
 下面看一下thread的构造函数
 
-```java
+```
 public Thread() {
      create(null, null, null, 0);
  }
@@ -125,7 +129,7 @@ public Thread() {
 
 **发现最终都会走到create（group, runnable, null, 0）里，看一下create里面的源码**
 
-```java
+```
 private void create(ThreadGroup group, Runnable runnable, String threadName, long stackSize) {
         Thread currentThread = Thread.currentThread();
         if (group == null) {
@@ -179,7 +183,7 @@ private void create(ThreadGroup group, Runnable runnable, String threadName, lon
 最后一行 是把当前thread加入到group里
 
 **public static native Thread currentThread(); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_currentThread 方法：**
-```java
+```
 static void Dalvik_java_lang_VMThread_currentThread(const u4* args,
     JValue* pResult)
 {
@@ -189,7 +193,7 @@ static void Dalvik_java_lang_VMThread_currentThread(const u4* args,
 }
 ```
 **该方法里的 dvmThreadSelf() 方法定义在 android/dalvik/vm/Thread.cpp 中：**
-```java
+```
 Thread* dvmThreadSelf()
 {
     return (Thread*) pthread_getspecific(gDvm.pthreadKeySelf);
@@ -203,7 +207,7 @@ Thread* dvmThreadSelf()
 **dalvik Thread 这个成员变量 threadObj 关联的就是对应的 Android Thread 对象，所以通过 native 方法 VMThread.currentThread() 返回的是存储在 TLS 中的当前 dalvik 线程对应的 Android Thread。**
 **接着分析上面的代码，如果没有给新线程指定 group 那么就会指定 group 为当前线程所在的 group 中，然后给新线程设置 name，priority 等。最后通过调用 ThreadGroup 的 addThread 方法将新线程添加到 group 中：**
 
-```java
+```
 /**
  * Called by the Thread constructor.
  */
@@ -219,7 +223,7 @@ final void addThread(Thread thread) throws IllegalThreadStateException {
 **ThreadGroup 的代码相对简单，它有一个名为 threadRefs 的列表，持有属于同一组的 thread 引用，可以对一组 thread 进行一些线程操作。**
 **上面分析的是 Android Thread 的构造过程，从上面的分析可以看出，Android Thread 的构造方法仅仅是设置了一些线程属性，并没有真正去创建一个新的 dalvik Thread，dalvik Thread 创建过程要等到客户代码调用 Android Thread 的 start() 方法才会进行。下面我们来分析 Java Thread 的 start() 方法：**
 
-```java
+```
 public synchronized void start() {
         checkNotStarted();
 
@@ -230,7 +234,7 @@ public synchronized void start() {
 ```
 **Android Thread 的 start 方法很简单，仅仅是转调 nativeCreate(Thread t, long stackSize, boolean daemon); 其 JNI 实现为 android/dalvik/vm/native/java_lang_VMThread.cpp 中的 Dalvik_java_lang_VMThread_create 方法：**
 
-```java
+```
 static void Dalvik_java_lang_VMThread_create(const u4* args, JValue* pResult)
 {
     Object* threadObj = (Object*) args[0];
@@ -242,7 +246,7 @@ static void Dalvik_java_lang_VMThread_create(const u4* args, JValue* pResult)
 }
 ```
 **dvmCreateInterpThread 的实现在 Thread.cpp 中，由于这个函数的内容很长，在这里只列出关键的地方：**
-```java
+```
 bool dvmCreateInterpThread(Object* threadObj, int reqStackSize)
 {
     Thread* self = dvmThreadSelf();
@@ -294,7 +298,7 @@ static Thread* allocThread(int interpStackSize)
 首先，通过调用 allocThread 创建一个名为 newThread 的 dalvik Thread  并设置一些属性，将设置其成员变量 threadObj 为传入的 Android Thread，这样 dalvik Thread 就与Android Thread 关联起来了；然后创建一个名为 vmThreadObj 的 VMThread 对象，设置其成员变量 vmData 为 newThread，设置 Android Thread threadObj 的成员变量 vmThread 为这个 vmThreadObj，这样 Android Thread 通过 VMThread 的成员变量 vmData 就和 dalvik Thread 关联起来了。
 然后，通过 pthread_create 创建 pthread 线程，并让这个线程 start，这样就会进入该线程的 thread entry 运行，下来我们来看新线程的 thread entry 方法 interpThreadStart，同样只列出关键的地方：
 
-```java
+```
 /*
  * pthread entry function for threads started from interpreted code.
  */
@@ -383,16 +387,16 @@ static void setThreadSelf(Thread* thread)
 }
 ```
 **在新线程的 thread entry 方法 interpThreadStart 中，首先设置线程的名字，然后通过调用 prepareThread 设置线程 id 以及其它一些属性，并调用 setThreadSelf 将新 dalvik Thread 自身保存在 TLS 中，这样之后就能通过  dvmThreadSelf 方法从 TLS 中获取它。然后修改状态为 THREAD_RUNNING，并调用对应 Android Thread 的 run 方法，运行客户代码：**
-```java
+
     public void run() {
         if (target != null) {
             target.run();
         }
     }
-```
+
 
 **对于继承自 Android Thread 带有 Looper 的 Android HandlerThread 来说，会调用它覆写 run 方法()，不懂的可以看一下上一篇内容**[HandlerThread源码分析](http://blog.csdn.net/android_text/article/details/70231214)
-```java
+
     public void run() {
         mTid = Process.myTid();
         Looper.prepare();
@@ -405,10 +409,10 @@ static void setThreadSelf(Thread* thread)
         Looper.loop();
         mTid = -1;
     }
-```
+
 target 在前面已经做了介绍，它是线程真正处理逻辑事务的地方。一旦逻辑事务处理完毕从 run 中返回，线程就会回到 interpThreadStart 方法中，继续执行 dvmDetachCurrentThread 方法：
 
-```java
+```
 /*
  * Detach the thread from the various data structures, notify other threads
  * that are waiting to "join" it, and free up all heap-allocated storage.
