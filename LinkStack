@@ -1,0 +1,65 @@
+```
+package com.hao.myrxjava;
+
+/**
+ * 简单的一个链表栈实现；非堵塞的
+ *
+ * @author ZHANGHAOHAO
+ * @date 2017/5/10
+ */
+
+public class LinkStack<E> {
+    //声明节点
+    private class Node{
+        E e;
+        Node next;
+        public Node(E e, Node next) {
+            this.e = e;
+            this.next = next;
+        }
+    }
+    private int length;
+    private Node top;
+    private int number;
+    private int max;
+    public LinkStack(int max) {
+        top = null;
+        this.max = max;
+        number = 0;
+    }
+
+    public boolean isEmpty() {
+        return top == null;
+    }
+
+    public boolean isFull() {
+        return number == max;
+    }
+    //入栈
+    public void push(E e) {
+        if (isFull())
+            throw new IllegalArgumentException("LinkStack is full");
+        top = new Node(e, top);
+        number++;
+    }
+
+    //出栈，但不删除元素
+    public Node peek() {
+        if (isEmpty())
+            throw new NullPointerException("is empty");
+        return top;
+    }
+
+    //出栈，并删除元素
+    public Node pop() {
+        if (isEmpty())
+            throw new NullPointerException("is empty");
+        Node node = top;
+        top = node.next;
+        node.next = null;
+        number--;
+        return node;
+    }
+}
+
+```
