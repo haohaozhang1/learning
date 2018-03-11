@@ -1,0 +1,17 @@
+1、APP是怎么启动的
+  总纲：安装App的过程中Launcher会通过PackgeManagerService从安装APP的
+  AndroidManifest里获取到主包名和主Activity的name来组装成intent信息。当在launcher点击APP图标的时候，会根据intent信息直接跳转该APP。
+  
+  for example：当要启动一个微信APP的时候
+  AMS简称：ActivityManagerService
+  step：
+    1、点击Launcher中的WX图标，Launcher会通知AMS我要启动微信APP，并根据保存的intent信息确定需要启动的那个页面
+    2、AMS通知Launcher我已收到，
+    3、Launcher执行onPause（）并通知AMS去启动微信APP去把
+    3、AMS检查微信APP是否已启动（1、已启动，直接打开微信APP；2、未启动，新启动一个进程来启动微信APP）
+    
+    以下都是未启动的过程
+    3、AMS在新进程中新建一个ActivityThread并执行main函数（启动完成）
+    4、微信APP启动完成以后，通知AMS我已经启动完成
+    5、AMS通知微信APP启动那个页面
+    6、创建context和启动的页面Activity建立联系，并执行onCreate（此处也是AMS启动的）
