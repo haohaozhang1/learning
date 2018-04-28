@@ -1,0 +1,61 @@
+
+
+
+----------
+
+场景：
+ 当ListView内有EditText的时候，只要EditText获取到焦点，Listview上下滑动就会导致崩溃，弹出键盘也会崩溃（弹出键盘会重新绘制Listview）
+ 
+ 
+
+```
+editText.setOnTouchListener(new View.OnTouchListener() {
+
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    ((ViewGroup) v.getParent())
+                            .setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+                    return false;
+                }
+            });
+```
+            
+```
+view.setOnTouchListener(new View.OnTouchListener() {
+
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    ((ViewGroup) v)
+                            .setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+                    return false;
+                }
+            });
+```
+
+![这里写图片描述](http://img.my.csdn.net/uploads/201210/17/1350460358_5684.jpg)
+
+该属性是当一个为view获取焦点时，定义viewGroup和其子控件两者之间的关系。
+
+属性的值有三种：
+
+        beforeDescendants：viewgroup会优先其子类控件而获取到焦点
+
+        afterDescendants：viewgroup只有当其子类控件不需要获取焦点时才获取焦点
+
+        blocksDescendants：viewgroup会覆盖子类控件而直接获得焦点
+
+
+----------
+
+1、android:clipToPadding
+意思是控件的绘制区域是否在padding里面。默认为true。如果你设置了此属性值为false。
+
+场景：ScrollView上下滑动，上滑动可以滑到最顶部
+
+2、
+
+只需在根节点设置android:clipChildren为false即可，默认为true
+可以通过android:layout_gravity控制超出的部分如何显示。
+android:clipChildren的意思：是否限制子View在其范围内
+
+场景：当底部中间host超出bottombAR
